@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import logging
+import os
 from functools import cache, partial
 from typing import Annotated
 
@@ -157,11 +158,16 @@ async def _get_health(
                 _check_server_status, _ws_to_http(STT_SERVER) + "/api/build_info"
             )
         )
-        llm_up = tg.create_task(
-            asyncio.to_thread(
-                _check_server_status, _ws_to_http(LLM_SERVER) + "/v1/models"
+        provider = os.getenv("LLM_PROVIDER", "").lower()
+        if provider == "openai":
+            # Pour OpenAI, on skip le health check ou on fait un test simple
+            llm_up = tg.create_task(asyncio.to_thread(lambda: True))
+        else:
+            llm_up = tg.create_task(
+                asyncio.to_thread(
+                    _check_server_status, _ws_to_http(LLM_SERVER) + "/v1/models"
+                )
             )
-        )
         voice_cloning_up = tg.create_task(
             asyncio.to_thread(
                 _check_server_status,
