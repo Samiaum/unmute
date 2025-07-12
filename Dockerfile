@@ -16,8 +16,8 @@ HEALTHCHECK --start-period=15s \
 FROM build AS prod
 # Running through uvicorn directly to be able to deactive the Websocket per message deflate which is slowing
 # down the replies by a few ms.
-CMD ["uv", "run", "--no-dev", "uvicorn", "unmute.main_websocket:app", "--host", "0.0.0.0", "--port", "80", "--ws-per-message-deflate=false"]
+CMD ["uv", "run", "--no-dev", "uvicorn", "unmute.stt_tts_server:app", "--host", "0.0.0.0", "--port", "80", "--ws-per-message-deflate=false"]
 
 
 FROM build AS hot-reloading
-CMD ["uv", "run", "--no-dev", "uvicorn", "unmute.main_websocket:app", "--reload", "--host", "0.0.0.0", "--port", "80", "--ws-per-message-deflate=false"]
+CMD ["uv", "run", "--no-dev", "uvicorn", "unmute.stt_tts_server:app", "--reload", "--host", "0.0.0.0", "--port", "80", "--ws-per-message-deflate=false"]
