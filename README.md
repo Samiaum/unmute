@@ -20,8 +20,7 @@ graph LR
     B --> TTS(Text-to-speech)
 ```
 
-- The user opens the Unmute website, served by the **frontend**.
-- By clicking "connect", the user establishes a websocket connection to the **backend**, sending audio and other metadata back and forth in real time.
+ - A client connects to the Unmute backend over WebSocket, sending audio and other metadata in real time.
   - The backend connects via websocket to the **speech-to-text** server, sending it the audio from the user and receiving back the transcription in real time.
   - Once the speech-to-text detects that the user has stopped speaking and it's time to generate a response, the backend connects to an **LLM** server to retrieve the response. We host our own LLM using [VLLM](https://github.com/vllm-project/vllm), but you could also use an external API like OpenAI or Mistral.
   - As the response is being generated, the backend feeds it to the **text-to-speech** server to read it out loud, and forwards the generated speech to the user.
@@ -105,31 +104,6 @@ If you have at least three GPUs available, add this snippet to the `stt`, `tts` 
               capabilities: [gpu]
 ```
 
-### Running without Docker
-
-Alternatively, you can choose to run Unmute by manually starting the services without going through Docker.
-This can be more difficult to set up because of the various dependencies needed.
-
-The following instructions only work for Linux and WSL.
-
-#### Software requirements
-
-* `uv`: Install with `curl -LsSf https://astral.sh/uv/install.sh | sh`
-* `cargo`: Install with `curl https://sh.rustup.rs -sSf | sh`
-* `pnpm`: Install with `curl -fsSL https://get.pnpm.io/install.sh | sh -`
-* `cuda 12.1`: Install it with conda or directly from the Nvidia website. Needed for the Rust processes (tts and stt).
-
-#### Hardware requirements
-
-Start each of the services one by one in a different tmux session or terminal:
-```bash
-./dockerless/start_frontend.sh
-./dockerless/start_backend.sh
-./dockerless/start_llm.sh        # Needs 6.1GB of vram
-./dockerless/start_stt.sh        # Needs 2.5GB of vram
-./dockerless/start_tts.sh        # Needs 5.3GB of vram
-```
-And the website should be accessible at `http://localhost:3000`.
 
 ### Connecting to a remote server running Unmute
 
@@ -145,28 +119,6 @@ ssh -N -L 3333:localhost:80 unmute-box
 If everything works correctly, this command will simply not output anything and just keep running.
 Then open `localhost:3333` in your browser.
 
-**For Dockerless**: You need to separately forward the backend (port 8000) and frontend (port 3000):
-
-```bash
-ssh -N -L 8000:localhost:8000 -L 3000:localhost:3000 unmute-box
-```
-
-```mermaid
-flowchart LR
-    subgraph Local_Machine [Local Machine]
-        direction TB
-        browser[Browser]
-        browser -. "User opens localhost:3000 in browser" .-> local_frontend[localhost:3000]
-        browser -. "Frontend queries API at localhost:8000" .-> local_backend[localhost:8000]
-    end
-    subgraph Remote_Server [Remote Server]
-        direction TB
-        remote_backend[Backend:8000]
-        remote_frontend[Frontend:3000]
-    end
-    local_backend -- "SSH Tunnel: 8000" --> remote_backend
-    local_frontend -- "SSH Tunnel: 3000" --> remote_frontend
-```
 
 ### HTTPS support
 
@@ -204,25 +156,17 @@ System prompts like this are defined in [`unmute/llm/system_prompt.py`](unmute/l
 Note that the file is only loaded when the backend starts and is then cached, so if you change something in `voices.yaml`,
 you'll need to restart the backend.
 
-### Swapping the frontend
+### Implementing a frontend
 
-The backend and frontend communicate over websocket using a protocol based on the
+Clients communicate with the backend using a protocol based on the
 [OpenAI Realtime API](https://platform.openai.com/docs/guides/realtime) ("ORA").
-Where possible, we try to match the ORA format, but there are some extra messages we needed to add,
-and others have simplified parameters.
-We try to make it clear where we deviate from the ORA format, see [`unmute/openai_realtime_api_events.py`](unmute/openai_realtime_api_events.py).
+Where possible, we match the ORA format but some extra messages are required and others have simplified parameters.
+See [`unmute/openai_realtime_api_events.py`](unmute/openai_realtime_api_events.py) for details.
 
-For detailed information about the WebSocket communication protocol, message types, and audio processing pipeline, see the [browser-backend communication documentation](docs/browser_backend_communication.md).
+For information about the WebSocket protocol and audio pipeline, see the [browser-backend communication documentation](docs/browser_backend_communication.md).
 
-Ideally, it should be simple to write a single frontend that can communicate with either the Unmute backend
-or the OpenAI Realtime API, but we are not fully compatible yet.
-Contributions welcome!
-
-The frontend is a Next.js app defined in `frontend/`.
-If you'd like to compare to a different frontend implementation,
-there is a Python client defined in
-[`unmute/loadtest/loadtest_client.py`](unmute/loadtest/loadtest_client.py),
-a script that we use to benchmark the latency and throughput of Unmute.
+Any web or native client can implement this protocol. A Python example is provided in
+[`unmute/loadtest/loadtest_client.py`](unmute/loadtest/loadtest_client.py).
 
 ### Tool calling
 
@@ -231,6 +175,15 @@ This is a common requirement so we would appreciate a contribution to support to
 The easiest way to integrate tool calling into Unmute would be to do so in a way that's fully invisible to Unmute itself - just make it part of the LLM server.
 See [this comment](https://github.com/kyutai-labs/unmute/issues/77#issuecomment-3035220686) on how this can be achieved.
 You'd need to write a simple server in FastAPI to wrap vLLM but plug in the tool call responses.
+
+## LiveKit agent integration
+
+The simplified API exposes two endpoints:
+
+- `POST /stt` or WebSocket `/stt/ws` – send 24 kHz mono PCM audio and receive the transcription.
+- `POST /tts` – send a JSON body `{"text": "Hello"}` and get raw PCM audio in the response.
+
+A LiveKit agent can connect to these endpoints directly to provide voice capabilities.
 
 ## Developing Unmute
 

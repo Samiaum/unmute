@@ -1,60 +1,19 @@
 # docker-compose.yml modifié pour RTX 4050 (6GB) + API LLM externe
+
 services:
-  traefik:
-    image: traefik:v3.3.1
-    command:
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-    ports:
-      - "80:80"
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
 
-  frontend:
-    image: unmute-frontend:latest
-    build:
-      context: frontend/
-      dockerfile: hot-reloading.Dockerfile
-    volumes:
-      - ./frontend/src:/app/src
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
-      - "traefik.http.routers.frontend.entrypoints=web"
-      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
-      - "traefik.http.routers.frontend.priority=10"
-
-  backend:
-    image: unmute-backend:latest
+  server:
+    image: unmute-server:latest
     build:
       context: ./
       target: hot-reloading
     volumes:
       - ./unmute:/app/unmute
     environment:
-      # Health-check variables (GET /api/build_info et /v1/models)
       - KYUTAI_STT_URL=ws://stt:8080
       - KYUTAI_TTS_URL=ws://tts:8080
-      - KYUTAI_LLM_URL=https://api.openai.com
-
-      # Variables pour le client OpenAI
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - LLM_PROVIDER=openai
-      - LLM_MODEL=gpt-4o-mini
-
-      # Autres configurations
-      - SYSTEM_LANGUAGE=fr
-      - NEWSAPI_API_KEY=${NEWSAPI_API_KEY}
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.backend.rule=PathPrefix(`/api`)"
-      - "traefik.http.routers.backend.middlewares=strip-api"
-      - "traefik.http.middlewares.strip-api.replacepathregex.regex=^/api/(.*)"
-      - "traefik.http.middlewares.strip-api.replacepathregex.replacement=/$$1"
-      - "traefik.http.routers.backend.entrypoints=web"
-      - "traefik.http.services.backend.loadbalancer.server.port=80"
-      - "traefik.http.routers.backend.priority=100"
+    ports:
+      - "8000:80"
 
   tts:
     image: moshi-server:latest
